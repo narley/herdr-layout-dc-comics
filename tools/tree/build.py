@@ -24,7 +24,7 @@ ORDER_AT = "    // Simulate the batch so later indexes include earlier moves."
 ORDER_NEW = "    out.splice(0, out.length, ...arrangedRows(out, sp.map((w) => w.id)));\n"
 FINISH_OLD = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })'
 FINISH_NEW = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; finishDrag(); cx.notify(); })\n        .on_hover((on, cx) => { if (!on) { cancelDrag(); cx.notify(); } })'
-MAIN_IMPORT = 'import { GROUPS, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";\n'
+MAIN_IMPORT = 'import { GROUPS, newTabButton, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";\n'
 def fill(text, c):
     return re.sub(r"\{\{(\w+)\}\}", lambda m: str(c[m.group(1)]), text)
 
@@ -128,6 +128,7 @@ function showTree(on) {{
     m = m[:x] + fill((here / "grouped.js").read_text(), c) + m[y:]
     m = sub(m, '''              .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()))
 ''', '''              .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+              .child(newTabButton(w, t))
               .when(!this.spaceFolded.has(w.id) && this.ops.count(w.id) > 0, (el) => el.child(this.spaceMinAll(w, t)))
               .when(this.ops.count(w.id) > 0, (el) => el.child(this.spaceFold(w, t))))
 ''')

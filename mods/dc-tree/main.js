@@ -12,7 +12,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
 import { Operators as Cards } from "./operators.js";
-import { GROUPS, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";
+import { GROUPS, newTabButton, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -492,6 +492,7 @@ export default class Spaces extends View {
             .child(h_flex().gap(9).items_center()
               .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
               .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+              .child(newTabButton(w, t))
               .when(!this.spaceFolded.has(w.id) && this.ops.count(w.id) > 0, (el) => el.child(this.spaceMinAll(w, t)))
               .when(this.ops.count(w.id) > 0, (el) => el.child(this.spaceFold(w, t))))
             .when(!tree, el => el.children(this.gitLines(sum, t)))),
