@@ -1,4 +1,5 @@
 // Built by tools/tree/build.py from dc-agents: the same cards, for the tree.
+import { byAddress, cancelDrag, sessionItem, sessionsInOrder } from "./arrange.js";
 // OPERATORS: every agent as an operator on patrolto the Construct.
 // Each gets a glyph mask, a 5x5 symmetric face of flickering code made from who it is.
 // Claude Code sessions show their telemetry from the `claude.stats` terminal label
@@ -102,7 +103,7 @@ function actionButtons(a, s, kids, t) {
   const chip = (id, label, tip, action) => div().id(`${id}-${a.address}`).size(18).flex().items_center().justify_center().rounded(4).border(1).border_color(t.dim).bg(t.popover)
     .cursor_pointer().hover((x) => x.bg(t.hover)).tooltip(tip)
     .on_click((_e, cx) => {
-      cx.stop_propagation();
+      (cancelDrag(), cx.stop_propagation());
       openOverlay({ mod: "session-actions", kind: "dialog", modal: true, width: 480, height: 300, props: { action, session: actionInfo(a, s), kids: kids.map((k) => actionInfo(k, k.stats)) } });
     })
     .child(label);
@@ -263,7 +264,7 @@ export class Operators {
     const layer = (src) => image(src).absolute().top(0).left(0).w(72).h(96);
     return v_flex().id(`hero-${a.address}`).w(74).flex_none().border(1).border_color(`${color}66`).bg(`${t.canvas}e0`).overflow_hidden()
       .tooltip(`${HERO_NAME[hero]} · click to change`)
-      .on_click((_e, cx) => { cx.stop_propagation(); this.reroll(key); })
+      .on_click((_e, cx) => { (cancelDrag(), cx.stop_propagation()); this.reroll(key); })
       .child(div().relative().w(72).h(96).overflow_hidden()
         .child(layer(`${OPS}/${hero}-${pose}-${this.frame}.png`)))
       .child(div().w_full().h(14).flex().items_center().justify_center().bg(`${color}1f`).border_t(1).border_color(`${color}44`)
@@ -301,7 +302,7 @@ export class Operators {
     return div().id(`card-min-all-${id}`).size(16).flex_none().flex().items_center().justify_center().border(1).border_color(t.dim)
       .text_size(12).font_semibold().text_color(t.muted).cursor_pointer().hover((x) => x.bg(t.hover).text_color(t.accent))
       .tooltip(allFolded ? "Expand all sessions here" : "Minimise all sessions here")
-      .on_click((_e, cx) => { cx.stop_propagation(); this.setAllMin(everyone, !allFolded); })
+      .on_click((_e, cx) => { (cancelDrag(), cx.stop_propagation()); this.setAllMin(everyone, !allFolded); })
       .child(allFolded ? "+" : "\u2013");
   }
 
@@ -310,7 +311,7 @@ export class Operators {
     return div().id(`card-min-${a.address}`).size(16).flex_none().flex().items_center().justify_center().border(1).border_color(t.dim)
       .text_size(12).font_semibold().text_color(t.muted).cursor_pointer().hover((x) => x.bg(t.hover).text_color(t.accent))
       .tooltip(folded ? "Expand this session" : "Minimise this session")
-      .on_click((_e, cx) => { cx.stop_propagation(); this.toggleMin(a.address); })
+      .on_click((_e, cx) => { (cancelDrag(), cx.stop_propagation()); this.toggleMin(a.address); })
       .child(folded ? "+" : "\u2013");
   }
 
@@ -421,9 +422,9 @@ export class Operators {
       .border_color(alarm ? t.blocked : active ? t.accent : t.border)
       .border_l(3)
       .child(head)
-      .children(kids.map((k, i) => h_flex().id(`operator-kid-${k.address}`).w_full().min_w(0).items_start().border_t(1).border_color(t.border)
+      .children(kids.map((k, i) => sessionItem(a.address, kids.map((x) => x.address), k.address, t, h_flex().id(`operator-kid-${k.address}`).w_full().min_w(0).items_start().border_t(1).border_color(t.border)
         .child(div().flex_none().w(14).pt(6).text_center().text_size(11).text_color(t.dim).child(i === kids.length - 1 ? "└" : "├"))
-        .child(div().flex_1().min_w(0).child(this.card(k, stats.get(k.address), now, t, sp, stats, [], true)))));
+        .child(div().flex_1().min_w(0).child(this.card(k, stats.get(k.address), now, t, sp, stats, [], true))), 1)));
   }
 
   // Everything one render needs, read once: each host read copies the whole list into JS.
@@ -431,6 +432,7 @@ export class Operators {
     const all = terminals();
     this.kids = bgChildren(all);
     this.allKids = this.kids;
+    for (const [parent, kids] of this.kids) this.kids.set(parent, sessionsInOrder(parent, kids));
     const flatKids = [...this.kids.values()].flat();
     const nestedAt = new Set(flatKids.map((k) => k.address));
     const list = agents().filter((a) => !nestedAt.has(a.address));
@@ -448,13 +450,18 @@ export class Operators {
       if (!this.bySpace.has(id)) this.bySpace.set(id, { parents: [], orphans: [] });
       return this.bySpace.get(id);
     };
-    for (const a of list) entry(spaceOfTab.get(a.tab) ?? a.space ?? null).parents.push(a);
+    for (const a of [...list].sort(byAddress)) entry(spaceOfTab.get(a.tab) ?? a.space ?? null).parents.push(a);
     // An attached session whose parent has gone still has a pane, so it stays in its sector.
     const parents = new Set(list.map((a) => a.address));
     const tabOf = new Map(paneList.filter((p) => p.terminal).map((p) => [p.terminal, p.tab]));
     for (const [parent, kids] of this.kids) {
       if (parents.has(parent)) continue;
       for (const k of kids) entry(spaceOfTab.get(tabOf.get(k.address)) ?? null).orphans.push(k);
+    }
+    // In the order they were dragged to, not by urgency: their state still shows on each card.
+    for (const [id, e] of this.bySpace) {
+      e.parents = sessionsInOrder(id, e.parents);
+      e.orphans = sessionsInOrder(`${id}#orphans`, e.orphans);
     }
     setAgentOrder([...sp.map((s) => s.id), null].flatMap((id) => this.bySpace.get(id)?.parents ?? []).map((a) => a.address));
   }
@@ -496,8 +503,8 @@ export class Operators {
     if (!e) return [];
     const now = Math.floor(Date.now() / 1000);
     return [
-      ...e.parents.map((a) => this.card(a, this.stats.get(a.address), now, t, this.sp, this.stats, this.kids.get(a.address) ?? [])),
-      ...e.orphans.map((k) => this.card(k, this.stats.get(k.address), now, t, this.sp, this.stats, [], true)),
+      ...e.parents.map((a) => sessionItem(id, e.parents.map((x) => x.address), a.address, t, this.card(a, this.stats.get(a.address), now, t, this.sp, this.stats, this.kids.get(a.address) ?? []))),
+      ...e.orphans.map((k) => sessionItem(`${id}#orphans`, e.orphans.map((x) => x.address), k.address, t, this.card(k, this.stats.get(k.address), now, t, this.sp, this.stats, [], true))),
     ];
   }
 }

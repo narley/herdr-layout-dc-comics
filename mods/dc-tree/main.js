@@ -12,6 +12,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
 import { Operators as Cards } from "./operators.js";
+import { GROUPS, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -253,6 +254,8 @@ export default class Spaces extends View {
       const kids = list.filter((k) => nested(k) && k.g.repo === r.g.repo);
       kids.forEach((k, n) => out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
     }
+    out.splice(0, out.length, ...arrangedRows(out, sp.map((w) => w.id)));
+    writeOrder(out, sp);
     return out;
   }
 
@@ -279,14 +282,29 @@ export default class Spaces extends View {
       .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none());
   }
 
-  // A machine's rows: each district with its heroes nested below it.
+  // Personal or Work, inside a machine: click to fold it, and drop a space on it to file it there.
+  groupHead(machine, group, rows, t) {
+    const key = `group:${group}:${machine ?? "local"}`;
+    const folded = groupFolded(machine, group);
+    const waiting = folded ? this.ops.waiting(rows.filter((r) => r.group === group).map((r) => r.w.id)) : 0;
+    return dropArea({ kind: "space", scope: String(machine ?? null), key, heading: true }, t,
+      h_flex().id(`drag-space-${key}`).h(26).flex_none().px(8).gap(7).items_center().text_size(11).font_family("Helvetica Neue").font_weight(700).text_color(t.ansi15)
+        .cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => { toggleGroup(machine, group); cx.notify(); })
+        .child(div().flex_1().min_w(0).truncate().child(group === "work" ? "WORK" : "PERSONAL"))
+        .when(waiting > 0, (el) => el.child(div().flex_none().text_size(11).font_weight(400).text_color(t.blocked).child(`${waiting} wake up`)))
+        .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
+  }
+
+  // A machine's rows: PERSONAL then WORK, each district with its heroes nested below it.
   spaceRows(rows, machine, known, t) {
     const O = this.ops;
     const nest = (children, tree) => v_flex().flex_none().ml(tree ? 24 : 12).pl(4).gap(5).mt(3).mb(5).border_l(1).border_color(t.border).children(children);
-    const out = rows.flatMap((r) => {
+    const draw = (r) => {
       const kids = this.spaceFolded.has(r.w.id) ? [] : O.rowsFor(r.w.id, t);
-      return [this.row(r, t), ...(kids.length ? [nest(kids, r.tree)] : [])];
-    });
+      return [r.tree ? this.row(r, t) : spaceItem(r, this.rowsNow, t, this.row(r, t)), ...(kids.length ? [nest(kids, r.tree)] : [])];
+    };
+    const out = rows.length ? GROUPS.flatMap((g) => [this.groupHead(machine, g, rows, t), ...(groupFolded(machine, g) ? [] : rows.filter((r) => r.group === g).flatMap(draw))]) : [];
     // Nothing goes missing: a hero in a district not on the list still shows.
     const stray = O.elsewhere(known, machine).flatMap((id) => O.rowsFor(id, t));
     if (stray.length) {
@@ -299,16 +317,18 @@ export default class Spaces extends View {
   plusButton(m, t) {
     return div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).text_size(13).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .tooltip(`New district on ${m ?? "this computer"}`)
-      .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", m ? { machine: m } : {}); }).child("+");
+      .on_click((_e, cx) => { (cancelDrag(), cx.stop_propagation()); run("space.new", m ? { machine: m } : {}); }).child("+");
   }
 
   // LOCAL, then REMOTE with one line per machine under it.
   grouped(t, collapsed) {
     const rows = this.ordered();
+    this.rowsNow = rows;
     if (collapsed) return rows.map((r) => this.compact(r, t));
     const O = this.ops;
     const known = new Set(rows.map((r) => r.w.id));
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...this.machines.map((m) => m.name)])].sort();
+    const remoteOrder = machinesInOrder(remote);
     const loading = (m) => {
       const layout = machines().find((k) => k.name === m)?.layout;
       return layout === "loading" || (!layout && this.machines.some((k) => k.name === m && k.state === "connected"))
@@ -343,11 +363,12 @@ export default class Spaces extends View {
     out.push(this.sectionHead("remote", "REMOTE", "server", this.remoteFolded, remote.flatMap(idsOn), toggleRemote, null, t));
     if (this.remoteFolded) return out;
 
-    for (const m of remote) {
+    for (const m of remoteOrder) {
       const machine = this.machines.find((k) => k.name === m);
       const connected = machine?.state === "connected";
       const folded = this.folded.has(m);
-      out.push(h_flex().id(`machine-${m}`).h(26).flex_none().px(8).gap(7).items_center().text_size(13).text_color(t.dim)
+      const item = { kind: "machine", scope: "remote", key: m, onDrop: (over, before) => dropMachine(remoteOrder, m, over, before) };
+      const head = (h_flex().id(`machine-${m}`).on_mouse_down("left", startDrag(item)).h(26).flex_none().px(8).gap(7).items_center().text_size(13).text_color(t.dim)
         .cursor_pointer().hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -360,14 +381,14 @@ export default class Spaces extends View {
         .when(!connected, (el) => el.child(div().flex_none().text_size(11).child((machine?.state ?? "asleep").replace(/_/g, " "))))
         .when(connected, (el) => el.child(this.plusButton(m, t)))
         .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      if (!folded) out.push(...body(m));
+      out.push(dropArea(item, t, v_flex().id(`drag-machine-${m}`).flex_none().min_w(0).child(head).children(!folded ? body(m) : [])));
     }
     return out;
   }
 
   // Minimises every card in this district. A press on a row switches district, so these stop their own.
   spaceMinAll(w, t) {
-    const stop = (_e, cx) => cx.stop_propagation();
+    const stop = (_e, cx) => (cancelDrag(), cx.stop_propagation());
     return div().id(`space-min-all-${w.id}`).flex_none().on_mouse_down("left", stop).on_mouse_up("left", stop)
       .child(this.ops.minAllButton(this.ops.members(w.id), t, w.id));
   }
@@ -375,13 +396,13 @@ export default class Spaces extends View {
   spaceFold(w, t) {
     const O = this.ops;
     const folded = this.spaceFolded.has(w.id);
-    const stop = (_e, cx) => cx.stop_propagation();
+    const stop = (_e, cx) => (cancelDrag(), cx.stop_propagation());
     const top = folded ? O.topStatus(w.id) : null;
     return h_flex().id(`space-fold-${w.id}`).h(20).flex_none().px(3).gap(4).items_center().text_size(10).text_color(t.dim)
       .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
       .tooltip(folded ? "Show this district's heroes" : "Hide this district's heroes")
       .on_mouse_down("left", stop).on_mouse_up("left", stop)
-      .on_click((_e, cx) => { cx.stop_propagation(); this.toggleSpace(w.id, cx); })
+      .on_click((_e, cx) => { (cancelDrag(), cx.stop_propagation()); this.toggleSpace(w.id, cx); })
       .when(folded, (el) => el.child(div().font_semibold().text_color(t[top] ?? t.dim).child(`${O.word(top)} [${O.count(w.id)}]`)))
       .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none());
   }
@@ -450,14 +471,6 @@ export default class Spaces extends View {
       .on_mouse_down("left", () => {
         this.pressed = i;
         this.over = i;
-      })
-      .on_mouse_move((_e, cx) => {
-        const source = spaces()[this.pressed];
-        const over = source && (source.machine ?? null) === (w.machine ?? null) ? i : null;
-        if (this.pressed !== null && this.over !== over) {
-          this.over = over;
-          cx.notify();
-        }
       })
       .on_mouse_up("left", (_e, cx) => {
         const from = this.pressed;
@@ -543,8 +556,9 @@ export default class Spaces extends View {
           .when(!collapsed, el => el.child(this.treeToggle(t)))
           .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
             .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14)))))
-      .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
-        .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
+      .child(v_flex().id("tree-list").flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+        .on_mouse_up("left", (_e, cx) => { this.pressed = null; finishDrag(); cx.notify(); })
+        .on_hover((on, cx) => { if (!on) { cancelDrag(); cx.notify(); } })
         .children(this.grouped(t, collapsed)));
   }
 }

@@ -21,14 +21,29 @@
       .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none());
   }
 
-  // A machine's rows: each {{sector}} with its {{ops}} nested below it.
+  // Personal or Work, inside a machine: click to fold it, and drop a space on it to file it there.
+  groupHead(machine, group, rows, t) {
+    const key = `group:${group}:${machine ?? "local"}`;
+    const folded = groupFolded(machine, group);
+    const waiting = folded ? this.ops.waiting(rows.filter((r) => r.group === group).map((r) => r.w.id)) : 0;
+    return dropArea({ kind: "space", scope: String(machine ?? null), key, heading: true }, t,
+      h_flex().id(`drag-space-${key}`).h(26).flex_none().px(8).gap(7).items_center().text_size(11).font_family("Helvetica Neue").font_weight(700).text_color({{machine}})
+        .cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => { toggleGroup(machine, group); cx.notify(); })
+        .child(div().flex_1().min_w(0).truncate().child(group === "work" ? "{{work}}" : "{{personal}}"))
+        .when(waiting > 0, (el) => el.child(div().flex_none().text_size(11).font_weight(400).text_color(t.blocked).child(`${waiting} {{wake}}`)))
+        .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
+  }
+
+  // A machine's rows: {{personal}} then {{work}}, each {{sector}} with its {{ops}} nested below it.
   spaceRows(rows, machine, known, t) {
     const O = this.ops;
     const nest = (children, tree) => v_flex().flex_none().ml(tree ? 24 : 12).pl(4).gap(5).mt(3).mb(5).border_l(1).border_color(t.border).children(children);
-    const out = rows.flatMap((r) => {
+    const draw = (r) => {
       const kids = this.spaceFolded.has(r.w.id) ? [] : O.rowsFor(r.w.id, t);
-      return [this.row(r, t), ...(kids.length ? [nest(kids, r.tree)] : [])];
-    });
+      return [r.tree ? this.row(r, t) : spaceItem(r, this.rowsNow, t, this.row(r, t)), ...(kids.length ? [nest(kids, r.tree)] : [])];
+    };
+    const out = rows.length ? GROUPS.flatMap((g) => [this.groupHead(machine, g, rows, t), ...(groupFolded(machine, g) ? [] : rows.filter((r) => r.group === g).flatMap(draw))]) : [];
     // Nothing goes missing: a {{op}} in a {{sector}} not on the list still shows.
     const stray = O.elsewhere(known, machine).flatMap((id) => O.rowsFor(id, t));
     if (stray.length) {
@@ -47,10 +62,12 @@
   // LOCAL, then REMOTE with one line per machine under it.
   grouped(t, collapsed) {
     const rows = this.ordered();
+    this.rowsNow = rows;
     if (collapsed) return rows.map((r) => this.compact(r, t));
     const O = this.ops;
     const known = new Set(rows.map((r) => r.w.id));
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...this.machines.map((m) => m.name)])].sort();
+    const remoteOrder = machinesInOrder(remote);
     const loading = (m) => {
       const layout = machines().find((k) => k.name === m)?.layout;
       return layout === "loading" || (!layout && this.machines.some((k) => k.name === m && k.state === "connected"))
@@ -85,11 +102,12 @@
     out.push(this.sectionHead("remote", "{{remote}}", "server", this.remoteFolded, remote.flatMap(idsOn), toggleRemote, null, t));
     if (this.remoteFolded) return out;
 
-    for (const m of remote) {
+    for (const m of remoteOrder) {
       const machine = this.machines.find((k) => k.name === m);
       const connected = machine?.state === "connected";
       const folded = this.folded.has(m);
-      out.push(h_flex().id(`machine-${m}`).h(26).flex_none().px(8).gap(7).items_center().text_size(13).text_color(t.dim)
+      const item = { kind: "machine", scope: "remote", key: m, onDrop: (over, before) => dropMachine(remoteOrder, m, over, before) };
+      const head = (h_flex().id(`machine-${m}`).on_mouse_down("left", startDrag(item)).h(26).flex_none().px(8).gap(7).items_center().text_size(13).text_color(t.dim)
         .cursor_pointer().hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -102,7 +120,7 @@
         .when(!connected, (el) => el.child(div().flex_none().text_size(11).child((machine?.state ?? "asleep").replace(/_/g, " "))))
         .when(connected, (el) => el.child(this.plusButton(m, t)))
         .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      if (!folded) out.push(...body(m));
+      out.push(dropArea(item, t, v_flex().id(`drag-machine-${m}`).flex_none().min_w(0).child(head).children(!folded ? body(m) : [])));
     }
     return out;
   }

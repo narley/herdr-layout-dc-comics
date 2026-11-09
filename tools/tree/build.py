@@ -7,12 +7,24 @@ from pathlib import Path
 here = Path(__file__).parent
 root = here.parent.parent
 LAYOUTS = {
-  "dc": dict(dir="dc-comics", file="dc-comics", list_w=284, tree_w=312, sector="district", sectors="Districts", op="hero", ops="heroes", Ops="Heroes", wake="wake up", local="LOCAL", remote="REMOTE", other="OTHER HEROES", machine="t.ansi15", head_round="",
+  "dc": dict(dir="dc-comics", file="dc-comics", list_w=284, tree_w=312, personal="PERSONAL", work="WORK", sector="district", sectors="Districts", op="hero", ops="heroes", Ops="Heroes", wake="wake up", local="LOCAL", remote="REMOTE", other="OTHER HEROES", machine="t.ansi15", head_round="",
     setup="this.castAll([...list, ...flatKids], this.stats, all);", sparg="this.sp, ", word='STATE[status]?.word ?? ""', cls="Operators", extra=["rain.js"]),
 }
 def sub(text, old, new):
     assert text.count(old) == 1, old[:80]
     return text.replace(old, new)
+def arranged(text):
+    """A row's own drag code gives way to arrange.js, and anything that stops a mouse event ends a drag."""
+    text, n = re.subn(r"      \.on_mouse_move\(\(_e, cx\) => \{\n.*?\n      \}\)\n", "", text, count=1, flags=re.S)
+    assert n == 1, "row drag"
+    return arranged_stops(text)
+def arranged_stops(text):
+    return text.replace("cx.stop_propagation()", "(cancelDrag(), cx.stop_propagation())")
+ORDER_AT = "    // Simulate the batch so later indexes include earlier moves."
+ORDER_NEW = "    out.splice(0, out.length, ...arrangedRows(out, sp.map((w) => w.id)));\n"
+FINISH_OLD = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })'
+FINISH_NEW = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; finishDrag(); cx.notify(); })\n        .on_hover((on, cx) => { if (!on) { cancelDrag(); cx.notify(); } })'
+MAIN_IMPORT = 'import { GROUPS, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";\n'
 def fill(text, c):
     return re.sub(r"\{\{(\w+)\}\}", lambda m: str(c[m.group(1)]), text)
 
@@ -94,13 +106,18 @@ function showTree(on) {{
     o = sub(o, 'minAllButton(everyone, t) {', 'minAllButton(everyone, t, id) {')
     o, n = re.subn(r'div\(\)\.id\("(op|card)-min-all"\)', r'div().id(`\1-min-all-${id}`)', o); assert n == 1, prefix
     o = sub(o, '.tooltip(allFolded ? "Expand all sessions" : "Minimise all sessions")', '.tooltip(allFolded ? "Expand all sessions here" : "Minimise all sessions here")')
+    # attached sessions can be dragged within their parent's box
+    o, n = re.subn(r"\.children\(kids\.map\(\(k, i\) => h_flex\(\)\.id\(", ".children(kids.map((k, i) => sessionItem(a.address, kids.map((x) => x.address), k.address, t, h_flex().id(", o); assert n == 1, prefix
+    o = sub(o, "[], true)))));", "[], true))), 1)));")
     o = o[:o.index("  render() {\n    const t = theme();\n    const all = terminals();")] + fill((here / "operators_tail.js").read_text(), c)
+    o = 'import { byAddress, cancelDrag, sessionItem, sessionsInOrder } from "./arrange.js";\n' + arranged_stops(o)
     (out / "operators.js").write_text(f"// Built by tools/tree/build.py from {prefix}-agents: the same cards, for the tree.\n" + o)
+    (out / "arrange.js").write_text((here / "arrange.js").read_text())
     for f in c["extra"]:
         (out / f).write_text((mods / f"{prefix}-agents" / f).read_text())
     m = (mods / f"{prefix}-spaces" / "main.js").read_text()
     m = f"// The {c['dir']} layout's tree view, built by tools/tree/build.py from {prefix}-spaces and\n// {prefix}-agents: {c['local']} and {c['remote']}, with each {c['op']} nested under its {c['sector']}.\n" + m
-    m = sub(m, 'from "herdr";\n', f'from "herdr";\nimport {{ {c["cls"]} as Cards }} from "./operators.js";\n')
+    m = sub(m, 'from "herdr";\n', f'from "herdr";\nimport {{ {c["cls"]} as Cards }} from "./operators.js";\n' + MAIN_IMPORT)
     m = sub(m, '    this.git = {}; // where()', '''    this.ops = new Cards();
     this.ops.init?.(_props, cx);   // its own timers and data
     this.spaceFolded = new Set(JSON.parse(localStorage.getItem("spaces.folded") ?? "[]"));
@@ -115,6 +132,18 @@ function showTree(on) {{
               .when(this.ops.count(w.id) > 0, (el) => el.child(this.spaceFold(w, t))))
 ''')
     m = sub(m, '    if (changed) setShared("space.colors", kept);\n', '    if (changed) setShared("space.colors", kept);\n    this.ops.prepare(sp);\n')
+    # this copy of Herdr's spaces mod never wrote its order back, and groups need that
+    m = sub(m, """out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
+    }
+    return out;
+""", """out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
+    }
+""" + ORDER_NEW + """    writeOrder(out, sp);
+    return out;
+""")
+    m = sub(m, FINISH_OLD, FINISH_NEW)
+    m = sub(m, '.child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar()', '.child(v_flex().id("tree-list").flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar()')
+    m = arranged(m)
     (out / "main.js").write_text(m)
     (out / "mod.json").write_text('{ "place": "none" }\n')
     print("built", out.name)

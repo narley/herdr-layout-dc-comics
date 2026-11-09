@@ -3,6 +3,7 @@
     const all = terminals();
     this.kids = bgChildren(all);
     this.allKids = this.kids;
+    for (const [parent, kids] of this.kids) this.kids.set(parent, sessionsInOrder(parent, kids));
     const flatKids = [...this.kids.values()].flat();
     const nestedAt = new Set(flatKids.map((k) => k.address));
     const list = agents().filter((a) => !nestedAt.has(a.address));
@@ -20,13 +21,18 @@
       if (!this.bySpace.has(id)) this.bySpace.set(id, { parents: [], orphans: [] });
       return this.bySpace.get(id);
     };
-    for (const a of list) entry(spaceOfTab.get(a.tab) ?? a.space ?? null).parents.push(a);
+    for (const a of [...list].sort(byAddress)) entry(spaceOfTab.get(a.tab) ?? a.space ?? null).parents.push(a);
     // An attached session whose parent has gone still has a pane, so it stays in its sector.
     const parents = new Set(list.map((a) => a.address));
     const tabOf = new Map(paneList.filter((p) => p.terminal).map((p) => [p.terminal, p.tab]));
     for (const [parent, kids] of this.kids) {
       if (parents.has(parent)) continue;
       for (const k of kids) entry(spaceOfTab.get(tabOf.get(k.address)) ?? null).orphans.push(k);
+    }
+    // In the order they were dragged to, not by urgency: their state still shows on each card.
+    for (const [id, e] of this.bySpace) {
+      e.parents = sessionsInOrder(id, e.parents);
+      e.orphans = sessionsInOrder(`${id}#orphans`, e.orphans);
     }
     setAgentOrder([...sp.map((s) => s.id), null].flatMap((id) => this.bySpace.get(id)?.parents ?? []).map((a) => a.address));
   }
@@ -68,8 +74,8 @@
     if (!e) return [];
     const now = Math.floor(Date.now() / 1000);
     return [
-      ...e.parents.map((a) => this.card(a, this.stats.get(a.address), now, t, {{sparg}}this.stats, this.kids.get(a.address) ?? [])),
-      ...e.orphans.map((k) => this.card(k, this.stats.get(k.address), now, t, {{sparg}}this.stats, [], true)),
+      ...e.parents.map((a) => sessionItem(id, e.parents.map((x) => x.address), a.address, t, this.card(a, this.stats.get(a.address), now, t, {{sparg}}this.stats, this.kids.get(a.address) ?? []))),
+      ...e.orphans.map((k) => sessionItem(`${id}#orphans`, e.orphans.map((x) => x.address), k.address, t, this.card(k, this.stats.get(k.address), now, t, {{sparg}}this.stats, [], true))),
     ];
   }
 }
