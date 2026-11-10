@@ -3,6 +3,8 @@
 Personal layout for Herdr Desktop.
 
 The spaces and tabs mods derive from herdr-traveler by Frank Lin (Apache-2.0), via the oompa-* mods, and from Herdr's built-in
-mods. Before redistributing them, keep this notice, add the Apache-2.0 licence text and check Herdr's licence.
+mods (Apache-2.0).
 
-Character names and likenesses belong to their owners. This repo is private; check those rights before publishing it.
+Licensed under the Apache License 2.0; see `LICENSE`. The derived mods were modified from their originals.
+
+Character names and likenesses belong to their owners. This is unofficial fan work, not affiliated with or endorsed by them.
