@@ -313,13 +313,13 @@ export default class Operators extends View {
 
   // A minimised card's one line: avatar, name, attached sessions folded inside, status.
   // The tooltip is on the text, not the whole row, so the button keeps its own.
-  foldedRow(a, name, who, status, tip, kids, t) {
+  foldedRow(a, name, who, status, tip, kids, t, s) {
     return [
       h_flex().id(`card-info-${a.address}`).flex_1().min_w(0).h_full().gap(7).items_center().tooltip(tip)
         .when(Boolean(who), (el) => el.child(div().flex_none().min_w(46).text_size(9.5).font_semibold().text_color(t.muted).child(who)))
         .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).text_color(t.foreground).child(name))
         .child(status),
-      this.hoveredCard === a.address && this.minButton(a, true, t),
+      this.hoveredCard === a.address && actionButtons(a, s, kids, t), this.hoveredCard === a.address && this.minButton(a, true, t),
     ].filter(Boolean);
   }
 
@@ -399,7 +399,7 @@ export default class Operators extends View {
       .when(blocked, (el) => el.child(div().absolute().top(0).left(0).right(0).bottom(0).bg(`${t.blocked}24`).loop("opacity", { from: 0, to: 1, period: 1400 })))
       .when(folded, (el) => {
         const who = HERO_NAME[this.cast?.[this.keys?.get(a.address)]?.hero];
-        return el.children(this.foldedRow(a, name.toUpperCase(), who, status(), foldedTip(a, s, name.toUpperCase(), who, st.word, machine, now, kids), kids, t));
+        return el.children(this.foldedRow(a, name.toUpperCase(), who, status(), foldedTip(a, s, name.toUpperCase(), who, st.word, machine, now, kids), kids, t, s));
       })
       .when(!folded, (el) => el.child(this.avatar(a, s, color, t))
         .child(v_flex().flex_1().min_w(0).gap(1).children(rows))
