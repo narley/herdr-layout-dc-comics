@@ -200,6 +200,15 @@ export default class Spaces extends View {
           info.behind = Math.abs(parseInt(b, 10)) || 0;
         }
       }
+      // No upstream: worth a word only when there's no remote at all, or the branch has commits none has.
+      if (!info.upstream && info.branch && info.branch !== "(detached)") {
+        const remotes = await exec("git", ["remote"], { cwd, on });
+        info.noRemote = remotes.code === 0 && !remotes.stdout.trim();
+        if (!info.noRemote) {
+          const own = await exec("git", ["rev-list", "--count", "HEAD", "--not", "--remotes"], { cwd, on });
+          info.unpushed = own.code === 0 ? parseInt(own.stdout, 10) || 0 : 0;
+        }
+      }
       this.git[key] = info;
       if (!on) this.watch(repo, cx);
     } catch {
@@ -319,7 +328,8 @@ export default class Spaces extends View {
     return {
       dirty: all.reduce((n, g) => n + g.dirty, 0),
       ahead: all.reduce((n, g) => n + g.ahead, 0),
-      local: all.filter((g) => !g.upstream && g.branch !== "(detached)").length,
+      local: all.filter((g) => g.noRemote).length,
+      unpushed: all.filter((g) => !g.upstream && !g.noRemote && g.unpushed > 0).length,
     };
   }
 
@@ -329,6 +339,7 @@ export default class Spaces extends View {
       sum.dirty > 0 && line(t.ansi3, `${sum.dirty} uncommitted file${sum.dirty === 1 ? "" : "s"}`),
       sum.ahead > 0 && line(t.ansi2, `${sum.ahead} unpushed commit${sum.ahead === 1 ? "" : "s"}`),
       sum.local > 0 && line(t.ansi1, `${sum.local} repo${sum.local === 1 ? "" : "s"} without a remote`),
+      sum.unpushed > 0 && line(t.ansi1, `${sum.unpushed} ${sum.unpushed === 1 ? "branch" : "branches"} not pushed`),
     ].filter(Boolean);
   }
 
