@@ -32,6 +32,25 @@ The layers button in the DISTRICTS header swaps the two sidebar lists for one tr
 under its space. `mods/dc-tree` is generated from this layout's own spaces and agents mods, so after changing
 either run `python3 tools/tree/build.py`.
 
+## Terminals in the tree
+
+Plain terminals (a shell, or a program started from one, not an agent) are counted on each space's
+`>_` button, and listed under the space's cards as a folded `TERMINALS 3 · 1 busy` line. Open it for
+one row per terminal: its folder, its tab, what it's running (or `idle`), and for how long. Click a row
+to go there; hover it for Close. Terminals idle for 3 hours or more are dimmed, and the line offers
+`N idle` (click twice) to close them all.
+
+Busy or idle comes from Herdr. The command itself comes from the terminal's title, so it shows when
+the shell sets the title to the running command, for example in zsh:
+
+```zsh
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec () { print -n -- "\e]2;${${1//[[:cntrl:]]/ }[1,80]}\a" }
+add-zsh-hook precmd  () { print -n -- "\e]2;\a" }
+```
+
+Without it a busy terminal shows the program's name (`node`, `ssh`) instead.
+
 ## Arranging the tree
 
 Drag machines, spaces and sessions to put them in the order you want. Each machine splits into Personal and Work: click a

@@ -40,7 +40,7 @@
     const O = this.ops;
     const nest = (children, tree) => v_flex().flex_none().ml(tree ? 24 : 12).pl(4).gap(5).mt(3).mb(5).border_l(1).border_color(t.border).children(children);
     const draw = (r) => {
-      const kids = this.spaceFolded.has(r.w.id) ? [] : O.rowsFor(r.w.id, t);
+      const kids = this.spaceFolded.has(r.w.id) ? [] : [...O.rowsFor(r.w.id, t), ...this.shells.rowsFor(r.w, t)];
       return [r.tree ? this.row(r, t) : spaceItem(r, this.rowsNow, t, this.row(r, t)), ...(kids.length ? [nest(kids, r.tree)] : [])];
     };
     const out = rows.length ? GROUPS.flatMap((g) => [this.groupHead(machine, g, rows, t), ...(groupFolded(machine, g) ? [] : rows.filter((r) => r.group === g).flatMap(draw))]) : [];

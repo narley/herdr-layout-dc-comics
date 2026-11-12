@@ -24,7 +24,7 @@ ORDER_AT = "    // Simulate the batch so later indexes include earlier moves."
 ORDER_NEW = "    out.splice(0, out.length, ...arrangedRows(out, sp.map((w) => w.id)));\n"
 FINISH_OLD = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })'
 FINISH_NEW = '.on_mouse_up("left", (_e, cx) => { this.pressed = null; finishDrag(); cx.notify(); })\n        .on_hover((on, cx) => { if (!on) { cancelDrag(); cx.notify(); } })'
-MAIN_IMPORT = 'import { GROUPS, newTabButton, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";\n'
+MAIN_IMPORT = 'import { Terminals } from "./terminals.js";\nimport { GROUPS, newTabButton, groupFolded, toggleGroup, machinesInOrder, arrangedRows, writeOrder, finishDrag, cancelDrag, startDrag, dropArea, dropMachine, spaceItem } from "./arrange.js";\n'
 def fill(text, c):
     return re.sub(r"\{\{(\w+)\}\}", lambda m: str(c[m.group(1)]), text)
 
@@ -113,6 +113,7 @@ function showTree(on) {{
     o = 'import { byAddress, cancelDrag, sessionItem, sessionsInOrder } from "./arrange.js";\n' + arranged_stops(o)
     (out / "operators.js").write_text(f"// Built by tools/tree/build.py from {prefix}-agents: the same cards, for the tree.\n" + o)
     (out / "arrange.js").write_text((here / "arrange.js").read_text())
+    (out / "terminals.js").write_text((here / "terminals.js").read_text())
     for f in c["extra"]:
         (out / f).write_text((mods / f"{prefix}-agents" / f).read_text())
     m = (mods / f"{prefix}-spaces" / "main.js").read_text()
@@ -120,6 +121,8 @@ function showTree(on) {{
     m = sub(m, 'from "herdr";\n', f'from "herdr";\nimport {{ {c["cls"]} as Cards }} from "./operators.js";\n' + MAIN_IMPORT)
     m = sub(m, '    this.git = {}; // where()', '''    this.ops = new Cards();
     this.ops.init?.(_props, cx);   // its own timers and data
+    this.shells = new Terminals();   // plain terminals per space (terminals.js)
+    this.shells.init(_props, cx);
     this.spaceFolded = new Set(JSON.parse(localStorage.getItem("spaces.folded") ?? "[]"));
     this.remoteFolded = JSON.parse(localStorage.getItem("sections.remoteFolded") ?? "false");
     this.git = {}; // where()''')
@@ -128,11 +131,11 @@ function showTree(on) {{
     m = m[:x] + fill((here / "grouped.js").read_text(), c) + m[y:]
     m = sub(m, '''              .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()))
 ''', '''              .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-              .child(newTabButton(w, t))
+              .child(newTabButton(w, t, this.shells.count(w)))
               .when(!this.spaceFolded.has(w.id) && this.ops.count(w.id) > 0, (el) => el.child(this.spaceMinAll(w, t)))
               .when(this.ops.count(w.id) > 0, (el) => el.child(this.spaceFold(w, t))))
 ''')
-    m = sub(m, '    if (changed) setShared("space.colors", kept);\n', '    if (changed) setShared("space.colors", kept);\n    this.ops.prepare(sp);\n')
+    m = sub(m, '    if (changed) setShared("space.colors", kept);\n', '    if (changed) setShared("space.colors", kept);\n    this.ops.prepare(sp);\n    this.shells.prepare(sp);\n')
     # this copy of Herdr's spaces mod never wrote its order back, and groups need that
     m = sub(m, """out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
     }
