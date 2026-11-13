@@ -159,6 +159,14 @@ function nameOf(a, s, sp) {
 const bar = (v) => (v == null ? "▯".repeat(BAR) : "▮".repeat(Math.round((v / 100) * BAR)) + "▯".repeat(BAR - Math.round((v / 100) * BAR)));
 
 // Everything a minimised card is hiding, for its tooltip.
+// Model and effort in a few letters, for a minimised card: OH = Opus high, FM = Fable medium,
+// SX = Sonnet xhigh, OXX = Opus max. Just the model's letter when the effort isn't known.
+const EFFORT_CODE = { low: "L", medium: "M", high: "H", xhigh: "X", max: "XX" };
+function modelCode(s) {
+  const m = String(s?.model ?? "").replace(/^claude[- ]/i, "").trim();
+  return m ? `${m[0].toUpperCase()}${EFFORT_CODE[String(s.effort ?? "").toLowerCase()] ?? ""}` : null;
+}
+
 function foldedTip(a, s, name, who, word, machine, now, kids) {
   if (a.status === "detached") return `${name}\nDetached. Click to reattach.`;
   const where = machine ? ` @${machine}` : "";
@@ -322,6 +330,7 @@ export class Operators {
       h_flex().id(`card-info-${a.address}`).flex_1().min_w(0).h_full().gap(7).items_center().tooltip(tip)
         .when(Boolean(who), (el) => el.child(div().flex_none().min_w(46).text_size(9.5).font_semibold().text_color(t.muted).child(who)))
         .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).text_color(t.foreground).child(name))
+        .when(Boolean(modelCode(s)), (el) => el.child(div().flex_none().text_size(10).font_semibold().text_color(t.muted).child(modelCode(s))))
         .child(status),
       this.hoveredCard === a.address && actionButtons(a, s, kids, t), this.hoveredCard === a.address && this.minButton(a, true, t),
     ].filter(Boolean);
