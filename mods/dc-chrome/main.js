@@ -74,6 +74,9 @@ export default class Chrome extends View {
           .text_size(9.5).font_bold().text_color(INK).child("GOTHAM // NIGHT WATCH")))
       .child(h_flex().absolute().top(10).right(10).gap(6)
         .when(!collapsed, (el) => el.child(this.button("search", "search", () => run("mod.open", { name: "picker" }), t)))
-        .when(!(collapsed && mac), (el) => el.child(this.button("sidebar-toggle", "sidebar", toggleSidebar, t))));
+        .when(!(collapsed && mac), (el) => el.child(this.button("sidebar-toggle", "sidebar", toggleSidebar, t))))
+      // On the macOS rail the traffic lights fill the top, so the button that widens it sits below them.
+      .when(collapsed && mac, (el) => el.child(h_flex().absolute().top(42).left(0).right(0).justify_center()
+        .child(this.button("sidebar-expand", "sidebar", (_e, cx) => { cx.stop_propagation(); toggleSidebar(); }, t).tooltip("Show the sidebar"))));
   }
 }
