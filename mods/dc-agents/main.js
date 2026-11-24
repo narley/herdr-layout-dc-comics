@@ -165,6 +165,22 @@ function modelCode(s) {
   return m ? `${m[0].toUpperCase()}${EFFORT_CODE[String(s.effort ?? "").toLowerCase()] ?? ""}` : null;
 }
 
+// Context used, for a minimised card: a ring that fills clockwise in CTX_STEPS steps, coloured
+// like the FOCUS meter (amber under 25% left, red under 10%). Hover it for the numbers.
+const CTX = "mods/dc-agents/ctx";
+const CTX_STEPS = 12;
+function ctxRing(a, s, t) {
+  if (s?.ctx?.pct == null) return null;
+  const used = Math.max(0, Math.min(100, s.ctx.pct));
+  const left = 100 - used;
+  const color = left < 10 ? t.blocked : left < 25 ? t.ansi3 : t.accent;
+  const step = Math.round((used / 100) * CTX_STEPS);
+  const layer = (src, c) => svg(src).absolute().top(0).left(0).size(11).text_color(c);
+  return div().id(`ctx-${a.address}`).relative().size(11).flex_none().tooltip(contextTip("FOCUS", s))
+    .child(layer(`${CTX}/ring.svg`, t.dim))
+    .when(step > 0, (el) => el.child(layer(`${CTX}/ring-${step}.svg`, color)));
+}
+
 function foldedTip(a, s, name, who, word, machine, now, kids) {
   if (a.status === "detached") return `${name}\nDetached. Click to reattach.`;
   const where = machine ? ` @${machine}` : "";
@@ -327,6 +343,7 @@ export default class Operators extends View {
         .when(Boolean(who), (el) => el.child(div().flex_none().min_w(46).text_size(9.5).font_semibold().text_color(t.muted).child(who)))
         .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).text_color(t.foreground).child(name))
         .when(Boolean(modelCode(s)), (el) => el.child(div().flex_none().text_size(10).font_semibold().text_color(t.muted).child(modelCode(s))))
+        .when(s?.ctx?.pct != null && a.status !== "detached", (el) => el.child(ctxRing(a, s, t)))
         .child(status),
       this.hoveredCard === a.address && actionButtons(a, s, kids, t), this.hoveredCard === a.address && this.minButton(a, true, t),
     ].filter(Boolean);
