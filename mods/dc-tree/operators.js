@@ -167,15 +167,25 @@ function modelCode(s) {
   return m ? `${m[0].toUpperCase()}${EFFORT_CODE[String(s.effort ?? "").toLowerCase()] ?? ""}` : null;
 }
 
+// Blends two "#rrggbb" colours (f from 0 to 1); other colour forms switch halfway.
+function mix(a, b, f) {
+  const rgb = (c) => (/^#[0-9a-f]{6}/i.test(c ?? "") ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null);
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return f < 0.5 ? a : b;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * f).toString(16).padStart(2, "0")).join("")}`;
+}
+
 // Context used, for a minimised card: a ring that fills clockwise in CTX_STEPS steps, coloured
-// like the FOCUS meter (amber under 25% left, red under 10%). Hover it for the numbers.
+// green, then amber by half full, then red. Hover it for the numbers.
 const CTX = "mods/dc-agents/ctx";
 const CTX_STEPS = 12;
+const CTX_AMBER = "#ffa726";
 function ctxRing(a, s, t) {
   if (s?.ctx?.pct == null) return null;
   const used = Math.max(0, Math.min(100, s.ctx.pct));
-  const left = 100 - used;
-  const color = left < 10 ? t.blocked : left < 25 ? t.ansi3 : t.accent;
+  // green up to 25% used, warming to amber by 50%, then red by 85% (the theme's green and red;
+  // a fixed amber, since some themes' yellow reads as lime)
+  const color = used < 25 ? t.ansi2 : used < 50 ? mix(t.ansi2, CTX_AMBER, (used - 25) / 25) : used < 85 ? mix(CTX_AMBER, t.blocked, (used - 50) / 35) : t.blocked;
   const step = Math.round((used / 100) * CTX_STEPS);
   const layer = (src, c) => svg(src).absolute().top(0).left(0).size(11).text_color(c);
   return div().id(`ctx-${a.address}`).relative().size(11).flex_none().tooltip(contextTip("FOCUS", s))
