@@ -178,12 +178,16 @@ function mix(a, b, f) {
 const CTX = "mods/dc-agents/ctx";
 const CTX_STEPS = 12;
 const CTX_AMBER = "#ffa726";
+// The colour for context used (0-100), on the ring and the context bar: green up to 25%,
+// warming to amber by 50%, then red by 85% (the theme's green and red; a fixed amber, since
+// some themes' yellow reads as lime).
+function ctxColor(used, t) {
+  return used < 25 ? t.ansi2 : used < 50 ? mix(t.ansi2, CTX_AMBER, (used - 25) / 25) : used < 85 ? mix(CTX_AMBER, t.blocked, (used - 50) / 35) : t.blocked;
+}
 function ctxRing(a, s, t) {
   if (s?.ctx?.pct == null) return null;
   const used = Math.max(0, Math.min(100, s.ctx.pct));
-  // green up to 25% used, warming to amber by 50%, then red by 85% (the theme's green and red;
-  // a fixed amber, since some themes' yellow reads as lime)
-  const color = used < 25 ? t.ansi2 : used < 50 ? mix(t.ansi2, CTX_AMBER, (used - 25) / 25) : used < 85 ? mix(CTX_AMBER, t.blocked, (used - 50) / 35) : t.blocked;
+  const color = ctxColor(used, t);
   const step = Math.round((used / 100) * CTX_STEPS);
   const layer = (src, c) => svg(src).absolute().top(0).left(0).size(11).text_color(c);
   return div().id(`ctx-${a.address}`).relative().size(11).flex_none().tooltip(contextTip("FOCUS", s))
@@ -391,8 +395,8 @@ export default class Operators extends View {
       const five = s.rl?.five_hour;
       const power = five && five.resets_at > now ? 100 - (five.used_percentage ?? 0) : null;
       const level = (v) => (v == null ? t.dim : v < 10 ? t.blocked : v < 25 ? t.ansi3 : t.accent);
-      const meter = (key, label, v) => row(key, [span(label, t.dim), span(bar(v), level(v)), span(v == null ? "  —" : ` ${String(Math.round(v)).padStart(3)}%${old ? " old" : ""}`, v != null && v < 25 ? level(v) : t.muted)]);
-      rows.push(meter("signal", "FOCUS  ", signal).tooltip(contextTip("FOCUS", s)));
+      const meter = (key, label, v, c = level(v), hot = v != null && v < 25) => row(key, [span(label, t.dim), span(bar(v), c), span(v == null ? "  —" : ` ${String(Math.round(v)).padStart(3)}%${old ? " old" : ""}`, hot ? c : t.muted)]);
+      rows.push(meter("signal", "FOCUS  ", signal, ctxColor(100 - signal, t), signal <= 50).tooltip(contextTip("FOCUS", s)));
       rows.push(meter("power", "ENERGY ", power).tooltip(limitTip("ENERGY", s, now)));
       // uplink · programs · rc
       let uplink = null;
