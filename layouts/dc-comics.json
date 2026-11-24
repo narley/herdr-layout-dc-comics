@@ -206,5 +206,8 @@
   "terminal_opacity": 0.74,
   "font": "JetBrains Mono",
   "ui_font": "Geist",
-  "preview": "layouts/dc-comics.png"
+  "preview": "layouts/dc-comics.png",
+  "link_handlers": [
+    "code-peek"
+  ]
 }
